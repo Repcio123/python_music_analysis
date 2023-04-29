@@ -1,6 +1,8 @@
 import math
 import random as rn
 import numpy as np
+import pandas as pd
+
 class DataProcessing:
     @staticmethod
     def shuffle(x):
@@ -9,10 +11,8 @@ class DataProcessing:
             x.iloc[i], x.iloc[j] = x.iloc[j], x.iloc[i]
 
     @staticmethod
-    def normalization(x):
-        values = x.select_dtypes(exclude="object")
-        columnNames = values.columns.tolist()
-        for column in columnNames:
+    def normalization(x, names):
+        for column in names:
             data = x.loc[:, column]
             max1 = max(data)
             min1 = min(data)
@@ -21,20 +21,36 @@ class DataProcessing:
                 x.at[row, column] = xprim
 
     @staticmethod
+    def getRating(x):
+        lis = [0] * len(x)
+        i = 0
+        for index, row in x.iterrows():
+            lis[i] +=  math.sqrt(row['Views']) + 2 * row['Likes'] / (row['Views']+1) + (row['Comments'] * 0.5) / (row['Views'] +1)
+            i+=1
+        return lis
+
+    @staticmethod
     def split(x, k):  # k = 0.7, 70% do treningowego
         splitPoint = int(len(x) * k)
         return x.iloc[0:splitPoint], x.iloc[splitPoint:]
 
     @staticmethod
-    def getDistances(x, newObj):
-        propertiesRange = len(x.columns.values) - 2
+    def getDistances(x, newObj, columnNames, function, power):
         lis = [0] * len(x)
-        for row in range(0, len(x), 1):
-            for i in range(0, propertiesRange):
-                lis[row] += abs(newObj.iat[i] - x.iat[row, i])
-                lis[row] += math.pow(newObj.iat[i] - x.iat[row, i], 2)
-            lis[row] = math.sqrt(lis[row])
+        i = 0
+        for index, row in x.iterrows():
+            for column in columnNames:
+                lis[i] +=(function(row[column], newObj[column], power))
+            i+=1
         return lis
+
+    @staticmethod
+    def manhattan(first, second, n):
+        return abs(first - second)
+                
+    @staticmethod
+    def euclides(first, second, n):
+        return math.pow(math.pow(first, n) - math.pow(second, n), 1/n)
 
     @staticmethod
     def sort(x, lis):
@@ -42,22 +58,60 @@ class DataProcessing:
         return x.sort_values(by=['distance'])
 
 
+    @staticmethod
+    def isBanger(x, bar):
+        lis = [0]*len(x)
+        i = 0
+        for index, row in x.iterrows():
+            if row['Rating'] >= bar:
+                lis[i] = 1
+            i+=1
+        return lis
+            
+
 
     @staticmethod
-    def NaiveBayes(x, sample, classCol):
+    def NaiveBayes(x, sample, classCol, columnNames):
         classes = x[classCol].unique().tolist()
-        collen = len(x.columns) - 1
-
+        
         res = {}
         for var in classes:
             res[var] = []
-            for cl in x.columns.tolist()[:collen]:
+            for cl in columnNames:
                 values = x.loc[x[classCol] == var, cl]
                 mean = values.mean()
                 sigm2 = values.std()**2
+                if sigm2 == 0:
+                    print(sigm2)
+                    sigm2=0.00000001
+                
                 res[var].append(DataProcessing.gauss(sample[cl], mean, sigm2))
             res[var] = 1 / len(classes) * np.prod(res[var])
         return max(res, key=res.get)
+
+    @staticmethod
+    def bayes(x, sample, classCol, colNames):
+        classes = x[classCol].unique().tolist()
+        res = {}
+        lis = []
+        for i in classes:
+            lis.append(x[x[classCol]==i])
+
+        for var in lis:
+            res[str(var[classCol][0])] = []
+            for cl in colNames:
+                values = x[cl]
+                mean = values.mean()
+                sigm2 = values.std()**2
+                if sigm2 == 0:
+                    sigm2=0.00000001
+                
+                res[str(var[classCol][0])].append(DataProcessing.gauss(sample[cl], mean, sigm2))
+            res[str(var[classCol][0])] = 1 / len(classes) * np.prod(res[str(var[classCol][0])])
+        return max(res, key=res.get)
+               
+
+
 
     @staticmethod
     def gauss(x, mu, sigm2):
